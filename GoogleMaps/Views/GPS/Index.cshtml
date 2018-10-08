@@ -1,0 +1,56 @@
+﻿<%@ Page validateRequest="false" %>
+@{
+    ViewBag.Title = "Index";
+}
+
+<script src="~/Scripts/jquery-1.10.2.js"></script>
+<script src="~/Scripts/jquery.unobtrusive-ajax.js"></script>
+
+<script type="text/javascript">
+    // Display searched data
+    $(document).ready(function () {
+        $("input.convertBtn").click(function () {
+            var x = $("textarea.dataString")[0].value;
+
+            // Run data through ajax web service request
+            $.ajax({
+                type: "POST",
+                url: '@Url.Action("Convert", "GPS")', // Map Controller, Search Action
+                data: { val: x },
+                success: function (data) {
+                    $("div.conversion").text = JSON.stringify(data);
+                }
+            });
+        });
+    });
+    
+</script>
+
+
+@{
+    ViewBag.Title = "Index";
+}
+
+<h2>Convert NMEA to JSON</h2>
+
+<table>
+    <tr>
+        <th>
+            Input NMEA String:
+        </th>
+        <td>
+            <textarea class="dataString" placeholder="NMEA String"></textarea>
+        </td>
+    </tr>
+    <tr>
+        <td colspan="2">
+            <input type="button" class="convertBtn" value="Convert" />
+        </td>
+    </tr>
+    <tr>
+        <td colspan="2">
+            <div class="conversion"></div>
+        </td>
+    </tr>
+</table>
+

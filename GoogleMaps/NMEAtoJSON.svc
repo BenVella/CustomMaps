@@ -1,0 +1,1 @@
+﻿<%@ ServiceHost Language="C#" Debug="true" Service="GoogleMaps.NMEAtoJSON" CodeBehind="NMEAtoJSON.svc.cs" %>

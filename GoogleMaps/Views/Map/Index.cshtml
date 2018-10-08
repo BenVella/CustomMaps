@@ -1,0 +1,324 @@
+﻿@model IEnumerable<GoogleMaps.Models.Marker>
+<script src="~/Scripts/jquery-1.10.2.js"></script>
+<script src="~/Scripts/jquery.unobtrusive-ajax.js"></script>
+
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBcmPdAerT6A1rWpzRtuil-IJYGlfKGLyQ&libraries=places"></script>
+
+<script type="text/javascript">
+    var selectedPlace;
+    $(document).on('change', '.placeTypeDropdown', function (e) {
+        selectedPlace = this.options[e.target.selectedIndex].value;
+    });
+
+    $(document).ready(function () {
+        // Build map
+        var map;
+        var gmarkers = [];
+        map_initialize();
+
+        function map_initialize() {
+            var mapOptions = {
+                center: new google.maps.LatLng(35.876232, 14.508323), // Malta
+                zoom: 13,
+                panControl: true,
+                zoomControl: true,
+                scaleControl: true,
+                mapTypeId: google.maps.MapTypeId.ROADMAP
+            };
+
+            map = new google.maps.Map(document.getElementById("googleMap"), mapOptions); // Create and attach to div
+
+            google.maps.event.addListener(map, 'click', function (event) {
+                // create the new marker with funciton call
+                AddMarker(event.latLng, "", "", "", "");
+            });
+
+            GetMarkers();
+            DrawTable();
+            GetJSON();
+        }
+
+        function GetMarkers() {
+            // Clear all markers before getting new ones
+            for (i = 0; i < gmarkers.length; i++) {
+                gmarkers[i].setMap(null);
+            }
+
+            $.ajax({
+                type: "POST",
+                url: '@Url.Action("GetMarkers", "Map")', // Map Controller, Search Action
+                success: function (data) {
+                    $.each(data, function (index, value) { // For each element in data
+                        var latlng = new google.maps.LatLng(parseFloat(value.latitude), parseFloat(value.longitude));
+                        AddMarker(latlng, value.title, value.desc, value.type, value.id);
+                    });
+                }
+            });
+        }
+
+        function AddMarker(mapPos, title, desc, type, id) {
+            // ######## MARKER ########
+            var iconPath = "/Icons/pin_" + type + ".png";
+            var marker = new google.maps.Marker({
+                position: mapPos,
+                map: map,
+                animation: google.maps.Animation.DROP,
+                title: "New Marker",
+                icon: iconPath
+            });
+
+            gmarkers.push(marker);
+
+            // ######## INFO WINDOW ########
+            // Table Content
+            var contentString = $('<table>' +
+                 '<tr><td><input type="hidden" class="id" value="' + id + '"</td></tr>' +
+                 '<tr><td><input type="text" class="title" placeholder="Title" maxlength = "20" value="' + title + '"/> </td> </tr>' +
+                 '<tr><td><textarea class="desc" placeholder="Description" maxlength="150">' + desc + '</textarea></td> </tr>' +
+                 '<tr><td><select class="type">' +
+                    '<option value="red">Red</option>' +
+                    '<option value="green">Green</option>' +
+				    '<option value="blue">Blue</option>' +
+                    '<option value="orange">Orange</option></select></td></tr>' +
+                 '<tr><td><input type="button" class= "saveBtn" value="Save"/><label class="status" align="right"></td></tr>' +
+                 '</table>');
+
+            contentString.find('select.type').val(type); // set type we detected
+
+            // create an infoWindow
+            var infowindow = new google.maps.InfoWindow();
+            infowindow.setContent(contentString[0]);
+
+            // ######## EVENTS ########
+
+            // add click event listener to marker which will open infoWindow
+            google.maps.event.addListener(marker, 'click', function () {
+
+                // Geocoding Process
+                var mGeo;
+                var geocoder = new google.maps.Geocoder;
+                geocoder.geocode({ 'location': mapPos }, function (results, status) {
+                    if (status === google.maps.GeocoderStatus.OK) {
+                        if (results[0]) {
+                            mGeo = results[0].formatted_address;
+                            document.getElementById('geoLoc').textContent = "Selected Location: " + mGeo;
+                        }
+                    } else {
+                        window.alert('Geocoder failed due to: ' + status);
+                    }
+                });
+
+                // Places Process
+                var request = {
+                    location: mapPos,
+                    radius: '1500',
+                    type: selectedPlace
+                };
+
+
+
+                var service = new google.maps.places.PlacesService(map);
+                service.nearbySearch(request, callback);
+
+                infowindow.open(map, marker); // click on marker opens info window
+            });
+
+            var saveBtn = contentString.find('input.saveBtn')[0];
+
+            if (typeof saveBtn !== 'undefined') //continue only when save button is present
+            {
+                //add click listener to save marker button
+                google.maps.event.addDomListener(saveBtn, "click", function (event) {
+                    var mReplace = contentString.find('form#infoForm'); //html to be replaced after success
+                    var mTitle = contentString.find('input.title')[0].value; //name input field value
+                    var mDesc = contentString.find('textarea.desc')[0].value; //description input field value
+                    var mType = contentString.find('select.type')[0].value; // Marker type
+                    var mId = parseInt(contentString.find('input.id')[0].value);
+
+                    if (mTitle == '' || mDesc == '') {
+                        alert("Please enter Name and Description!");
+                    } else if (mType == '') {
+                        alert("Select a valid marker type")
+                    } else {
+                        SaveMarker(marker, mTitle, mDesc, mType, mId); //call save marker function
+                        var lblStatus = contentString.find('label.status')[0];
+                        lblStatus.textContent = "Saved";
+                    }
+                });
+            }
+        }
+
+        function SaveMarker(marker, mTitle, mDesc, mType, mId) {
+            // Prepare info
+            var myData = {
+                title: mTitle,
+                description: mDesc,
+                latitude: marker.position.lat(),
+                longitude: marker.position.lng(),
+                type: mType,
+                markerId: mId
+            };
+
+            // Run post
+            $.ajax({
+                type: "POST",
+                url: '@Url.Action("SaveMarker", "Map")', // Map Controller, AddMarker Action
+                data: { mvm: myData },
+                success: function (result) {
+
+                }
+            });
+        }
+
+        // Display searched data
+        $("#txtSearch").keyup(function () {
+            var x = $("#txtSearch").val();
+
+            // Clear all markers before getting new ones
+            for (i = 0; i < gmarkers.length; i++) {
+                gmarkers[i].setMap(null);
+            }
+
+            $.ajax({
+                type: "POST",
+                url: '@Url.Action("Search", "Map")', // Map Controller, Search Action
+                data: JSON.stringify({ "title": x }),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (data) {
+                    var table = "<table class='table'>";
+                    $.each(data, function (index, value) { // For each element in data:
+                        table += "<tr><td>" + value.title + "</td></tr>"; // add it to the table list
+                        var latlng = new google.maps.LatLng(parseFloat(value.latitude), parseFloat(value.longitude));
+                        AddMarker(latlng, value.title, value.desc, value.type, value.id);
+                    });
+                    table += "</table>";
+                    $("#myData").html(table);
+                }
+            });
+        });
+
+        function DrawTable() {
+            $.ajax({
+                type: "POST",
+                url: '@Url.Action("GetMarkers", "Map")', // Map Controller, Search Action
+                success: function (data) {
+                    var table = document.createElement("TABLE"); table.style.width = "100%";
+                    var tr = document.createElement("TR");
+                    var thLongitude = document.createElement("TH"); thLongitude.textContent = "Longitude"; tr.appendChild(thLongitude);
+                    var thLatitude = document.createElement("TH"); thLatitude.textContent = "Latitude"; tr.appendChild(thLatitude);
+                    var thTitle = document.createElement("TH"); thTitle.textContent = "Title"; tr.appendChild(thTitle);
+                    var thDescription = document.createElement("TH"); thDescription.textContent = "Description"; tr.appendChild(thDescription);
+                    var thIcon = document.createElement("TH"); thIcon.textContent = "Icon"; tr.appendChild(thIcon);
+                    table.appendChild(tr);
+
+                    $.each(data, function (index, value) { // For each element in data:
+                        var trEntry = document.createElement("TR");
+                        var tdLong = document.createElement("TD"); tdLong.textContent = value.longitude; trEntry.appendChild(tdLong);
+                        var tdLat = document.createElement("TD"); tdLat.textContent = value.latitude; trEntry.appendChild(tdLat);
+                        var tdTitle = document.createElement("TD"); tdTitle.textContent = value.title; trEntry.appendChild(tdTitle);
+                        var tdDesc = document.createElement("TD"); tdDesc.textContent = value.desc; trEntry.appendChild(tdDesc);
+
+                        var img = document.createElement("IMG"); img.src = '/Icons/pin_' + value.type + '.png';
+                        var tdIcon = document.createElement("TD"); tdIcon.appendChild(img); trEntry.appendChild(tdIcon);
+                        table.appendChild(trEntry);
+                    });
+
+                    $("#DOMTable").html(table);
+                }
+            });
+        }
+
+        function GetJSON() {
+            $.ajax({
+                type: "POST",
+                url: '@Url.Action("GetMarkers", "Map")', // Map Controller, Search Action
+                success: function (data) {
+                    var json = JSON.stringify(data);
+                    var blob = new Blob([json], { type: "application/json" });
+                    var url = URL.createObjectURL(blob);
+
+                    var a = document.createElement('a');
+                    a.download = "Markers.json";
+                    a.href = url;
+                    a.textContent = "Download Markers.json";
+
+                    document.getElementById('download').appendChild(a);
+                }
+            });
+        }
+        var pmarkers = [];
+        var placeinfowindow = new google.maps.InfoWindow();
+        function callback(results, status) {
+            for (var i = 0; i < pmarkers.length; i++) {
+                pmarkers[i].setMap(null);
+            }
+
+            if (status === google.maps.places.PlacesServiceStatus.OK) {
+                for (var i = 0; i < results.length; i++) {
+                    createMarker(results[i]);
+                }
+            }
+        }
+
+        function createMarker(place) {
+            var placeLoc = place.geometry.location;
+            var marker = new google.maps.Marker({
+                map: map,
+                position: place.geometry.location
+            });
+
+            pmarkers.push(marker);
+
+            google.maps.event.addListener(marker, 'click', function () {
+                placeinfowindow.setContent(place.name);
+                placeinfowindow.open(map, this);
+            });
+        }
+    });
+</script>
+
+
+@{
+    ViewBag.Title = "Index";
+}
+
+<h2>Index</h2>
+
+<table>
+    <tr>
+        <td valign="top">
+            @Html.TextBox("txtSearch", null, new { @placeholder = "Search a marker" })
+            <div id="myData">
+                <table class="table">
+                    @foreach (var item in Model)
+                    {
+                        <tr>
+                            <td>
+                                @item.title
+                            </td>
+                        </tr>
+                    }
+                </table>
+            </div>
+        </td>
+        <td valign="top">
+            <div id="googleMap" style="width:1000px;height:600px;"></div>
+        </td>
+        <td>
+            <select class="placeTypeDropdown">
+                <option disabled selected>Select Option</option>
+                <option value="restaurant">Restaurant</option>
+                <option value="bank">Bank</option>
+                <option value="gas_station">Petrol Station</option>
+                <option value="store">Store</option>
+            </select>
+        </td>
+    </tr>
+    <tr>
+        <td><div id="download"></div></td>
+        <td><div id="geoLoc" style="align-content:center; font-weight:bold"></div></td>
+    </tr>
+</table>
+
+<div id="DOMTable"></div>

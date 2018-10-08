@@ -1,0 +1,174 @@
+﻿@model IEnumerable<GoogleMaps.Models.GpsToJsonViewModel>
+<title>@ViewBag.Title</title>
+
+
+
+<script src="~/Scripts/jquery-1.10.2.js"></script>
+<script src="~/Scripts/jquery.unobtrusive-ajax.js"></script>
+
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBcmPdAerT6A1rWpzRtuil-IJYGlfKGLyQ"></script>
+@{
+    ViewBag.Title = "NMEA GPS Parser";
+}
+
+<script type="text/javascript">
+    $(document).ready(function () {
+        // GLOBAL VARIABLES
+        var map;
+        
+        // DISTANCE CALCULATION
+        Number.prototype.toRadians = function() {
+            return this * Math.PI / 180;
+        }
+
+        function haversineDistance(latLngFrom, latLngTo) {
+            var lat1 = latLngFrom.lat; var lon1 = latLngFrom.lng;
+            var lat2 = latLngTo.lat; var lon2 = latLngTo.lng;
+
+            var R = 6371000; // metres
+            var l1 = lat1.toRadians();
+            var l2 = lat2.toRadians();
+            var diffLat = (lat2-lat1).toRadians();
+            var diffLon = (lon2-lon1).toRadians();
+
+            var a = Math.sin(diffLat/2) * Math.sin(diffLat/2) +
+                    Math.cos(l1) * Math.cos(l2) *
+                    Math.sin(diffLon/2) * Math.sin(diffLon/2);
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+            var d = R * c;
+            return d;
+        }
+
+        function markAndMeasureDistance(markerPositions) {
+            var originalPosition = markerPositions[0];
+
+            // Get overall distance covered
+            var totalCumulative = 0;
+
+            var currentPosition = markerPositions[0];
+            var nextPosition = markerPositions[1];
+            var index = 1;
+            for (i = 0; i < markerPositions.length; i++) {
+                var cumulativeDistance = 0;
+                while (cumulativeDistance < 400 && index < markerPositions.length) {
+                    currentPosition = nextPosition;
+                    nextPosition = markerPositions[index];
+                    var distance = haversineDistance(currentPosition,nextPosition);
+                    cumulativeDistance += distance;
+                    totalCumulative += distance;
+                    index++;
+                }
+
+                var mark = new google.maps.Marker({
+                    position: nextPosition,
+                    map: map,
+                    title: "400m milestone"
+                });
+            }
+
+            // Add final marker
+            var marker = new google.maps.Marker({
+                position: nextPosition,
+                map: map,
+                title: "Finish milestone"
+            });
+
+            var infowindow = new google.maps.InfoWindow();
+            infowindow.setContent("Finish! Total: " + totalCumulative + " meters");
+            infowindow.open(map, marker); // click on marker opens info window
+        }
+
+        
+        map_initialize();
+        function map_initialize() {
+            var mapOptions = {
+                center: new google.maps.LatLng(35.876232, 14.508323), // Malta
+                zoom: 13,
+                panControl: true,
+                zoomControl: true,
+                scaleControl: true,
+                mapTypeId: google.maps.MapTypeId.ROADMAP
+            };     
+            map = new google.maps.Map(document.getElementById("googleMap"), mapOptions); // Create and attach to div
+            
+            var data = modelToJson();
+            var markerPositions = [];
+
+            $.each(data, function(index, value){
+                var temp = {lat: value.latitude, lng: value.longitude};
+                markerPositions.push(temp);
+            });
+
+            var gpsPath = new google.maps.Polyline({
+                path: markerPositions,
+                geodesic: true,
+                strokeColor: '#FF0000',
+                strokeOpacity: 1.0,
+                strokeWeight: 2
+            });
+
+            gpsPath.setMap(map);
+
+            markAndMeasureDistance(markerPositions);            
+        }
+
+        
+        
+        function modelToJson() {
+            var jsonModel = @Html.Raw(Json.Encode(Model));
+            return jsonModel;
+        }
+
+        var json = document.getElementById('jsonData').innerHTML = JSON.stringify(modelToJson());
+
+        function makeJsonFile() {
+            var data = modelToJson();
+            var json = JSON.stringify(data);
+            var blob = new Blob([json], { type: "application/json" });
+            var url = URL.createObjectURL(blob);
+
+            var a = document.createElement('a');
+            a.download = "Markers.json";
+            a.href = url;
+            a.textContent = "Download Markers.json";
+
+            return a;
+        }
+
+        var jsonFile = document.getElementById('download').appendChild(makeJsonFile());
+
+        
+    });
+</script>
+
+<h2>@ViewBag.Title</h2>
+
+<div>
+    @using (Html.BeginForm("NMEAtoModel", "Map", FormMethod.Post, new { enctype = "multipart/form-data" }))
+    {
+        <input type="file" name="file" />
+            <input type="submit" value="submit" />
+    }
+    <div id="googleMap" style="width:100%;height:600px;"></div>
+    @if (Model != null)
+    {
+
+        <table style="width:100%">
+            <tr><th>Latitude</th><th>Longitude</th><th>Time</th></tr>
+        </table>
+            <div style="overflow-y:scroll; overflow-x:hidden; height:400px">
+                <table style="width:100%">
+                    @foreach (var item in Model)
+                    {
+                        <tr><td>@item.latitude</td><td>@item.longitude</td><td>@item.time</td></tr>
+                    }
+                </table>
+            </div>
+            <div id="download"></div>
+            <div id="jsonData" style="overflow-y:scroll; overflow-x:hidden; height:300px"></div>
+
+    }
+</div>
+
+

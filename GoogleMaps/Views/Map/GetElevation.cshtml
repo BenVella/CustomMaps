@@ -1,0 +1,62 @@
+﻿<script src="~/Scripts/jquery-1.10.2.js"></script>
+<script src="~/Scripts/jquery.unobtrusive-ajax.js"></script>
+@{
+    ViewBag.Title = "GetElevation";
+}
+
+<h2>Get Elevation</h2>
+
+<p>
+    The following page tests the microsoft bing webservice "http://dev.virtualearth.net/REST/v1/Elevation/SeaLevel" with two points provided displayed below.  The result is the offset in meters from the sea level.
+</p>
+
+<script type="text/javascript">
+    $(document).ready(function () {
+
+        function GetElevation() {
+            var values = {
+                lat1: 35.876232,
+                lng1: 14.508323,
+                lat2: 35.276232,
+                lng2: 15.608323
+            };
+
+            $.ajax({
+                type: "POST",
+                url: '@Url.Action("GetElevation", "Map")', // Map Controller, Search Action
+                data: values,
+                success: function (data) {
+                    var jsonData = JSON.parse(data);
+                    var results = jsonData.resourceSets[0].resources[0].offsets;
+
+                    var tableResults = "<table style='width:100%'><tr><th>Point to check</th><th>Elevation from Sea (meters)</th></tr>"
+
+                    tableResults += "<tr><td>" + values.lat1 + "," + values.lng1 + "</td><td>" + results[0] + "</td></tr>";
+                    tableResults += "<tr><td>" + values.lat2 + "," + values.lng2 + "</td><td>" + results[1] + "</td></tr>";
+
+                    tableResults += "</table>";
+
+                    $("#elevationResults").html(tableResults);
+                }
+            });
+        }
+
+        GetElevation();
+
+        function ReadVal () {
+            var toSearch = $("#searchString").val();
+
+            $.ajax({
+                type: "POST",
+                url: '@Url.Action("GetElevation", "Map")', // Map Controller, Search Action
+                data: toSearch,
+                success: function (data) {
+                    alert(data);
+                }
+            });
+        }
+    });
+
+</script>
+
+<div id="elevationResults"></div>
